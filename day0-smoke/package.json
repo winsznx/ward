@@ -1,0 +1,26 @@
+{
+  "name": "ward-day0-smoke",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Day-0 gate #1 — prove a real CAP order settles on Base mainnet end-to-end via @croo-network/sdk",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "provider": "tsx src/provider.ts",
+    "requester": "tsx src/requester.ts",
+    "test:integrity": "tsx verify-integrity.itest.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@croo-network/sdk": "0.2.1",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.5.0"
+  }
+}

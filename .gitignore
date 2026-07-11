@@ -1,0 +1,12 @@
+# secrets — NEVER commit (real keys live here)
+.env
+.env.local
+.env.*.local
+
+# deps / build / os
+node_modules/
+dist/
+*.log
+.DS_Store
+
+# keep tracked: .env.example, all src, docs

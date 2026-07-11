@@ -1,0 +1,25 @@
+{
+  "name": "ward-firewall",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Ward injection-scan firewall (PRD §7.1) — deterministic pattern layer + Claude judge with asymmetric resolve",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "pattern": "tsx src/run.ts",
+    "combined": "tsx src/run-combined.ts",
+    "gate": "tsx src/gate.itest.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.106.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.5.0"
+  }
+}
