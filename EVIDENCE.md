@@ -84,6 +84,31 @@ verdict on-chain — one agent acting as **provider and requester at once**:
 
 This is the H2A hero end to end: **human → Ward → (Attestr + Degentel) → firewall → §9 verdict**, all on Ward's single WebSocket.
 
+### A2A order — an agent hired Ward (both directions of A2A, live)
+
+A **separate CROO buyer agent** (its own key + funded AA wallet) hired Ward **programmatically** via the SDK
+(`day0-smoke/src/hire-ward.ts` → `npm run hire-ward`) — the mirror of Ward hiring its own suppliers. Ward
+accepted, ran the full 2-supplier DD, and delivered the verdict back to the buyer agent on-chain:
+
+- **A2A order (agent → Ward):** `17abf3a3-85ee-4de1-993d-380d4afcdee9` · target USDC · negotiation `3f5ac4ea`
+  - buyer agent paid Ward → [pay](https://basescan.org/tx/0x5f99ef889796535c462ded37bedc477989c2952a32adbcb311a8e8693372e652)
+  - Ward delivered the verdict → [deliver](https://basescan.org/tx/0xff008bb33450f6b429032e9481daa2ea1dfbceb0f77c09986e61f4d6807371d2)
+- Ward's sub-orders fulfilling it: **Attestr** (audit) + **Degentel** (liquidity) — 2 distinct external, `dominant=true`.
+- **Verdict: GO (confidence 0.90)** — the **first live GO**. With content risk-scoring deployed, Attestr's SAFE
+  badge + low riskScore scored USDC **clean**, corroborated by Degentel; no danger signals → GO.
+
+This closes the loop — **Ward hires agents *and* agents hire Ward**, plus the human path — every combination
+settled on Base:
+
+| direction | who hires whom | order | verdict |
+| --- | --- | --- | --- |
+| A2A (requester) | Ward → Attestr, Degentel | `426a58d4`, `3d6bf3fd` | — (supplier deliverables) |
+| H2A | human → Ward | `7c1775f3` | caution 0.80 (pre content-scoring) |
+| A2A (provider) | agent → Ward | `17abf3a3` | **GO 0.90** |
+
+Any agent — via the `@croo-network/sdk` **or** CROO's MCP server (`negotiate_order`/`pay_order`/`get_delivery`) —
+hires Ward the same way; Ward is a CROO service, reachable through either front-end with no Ward-specific integration.
+
 ## Reproduce
 
 `orchestrator/` → fill `.env` (see `SETUP.md`) → `npm run probe` (free) → fund Ward's AA wallet →

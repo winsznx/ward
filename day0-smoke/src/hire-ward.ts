@@ -1,7 +1,7 @@
 import { AgentClient, EventType, type Event } from '@croo-network/sdk';
 import dotenv from 'dotenv';
 import { Logger } from './logger';
-import { installShutdown, watchConnection } from './runtime';
+import { installShutdown, sleep, watchConnection } from './runtime';
 
 dotenv.config();
 
@@ -84,9 +84,16 @@ async function main(): Promise<void> {
       log.step('COMPLETED', 'Ward delivered — fetching the verdict', { order: orderId });
       try {
         const order = await client.getOrder(orderId);
-        const delivery = await client.getDelivery(orderId);
         log.tx('deliver', order.deliverTxHash);
-        const raw = delivery.deliverableText ?? '';
+        // OrderCompleted can arrive a beat before the delivery projection is consistent — re-read a
+        // bounded number of times so the verdict text isn't briefly empty.
+        let raw = '';
+        for (let attempt = 0; attempt < 6; attempt++) {
+          const delivery = await client.getDelivery(orderId);
+          raw = delivery.deliverableText ?? '';
+          if (raw.trim().length > 0) break;
+          await sleep(1500);
+        }
         log.info('=== WARD VERDICT (received by the buyer agent) ===');
         try {
           console.log(JSON.stringify(JSON.parse(raw), null, 2));
