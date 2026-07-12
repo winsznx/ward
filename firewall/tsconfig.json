@@ -14,5 +14,5 @@
     "resolveJsonModule": true,
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "../internal/firewall-ref/corpus.ts"]
+  "include": ["src/**/*.ts"]
 }

@@ -109,7 +109,7 @@ through the **real** `resolve()` logic.
 ANTHROPIC_API_KEY=sk-... npm run combined   # fully live HTTP judge
 ```
 
-## Results (corpus = internal/firewall-ref/corpus.ts · 16 attacks + 12 clean)
+## Results (corpus = src/corpus.ts · 16 attacks + 12 clean)
 
 Live run via `npm run combined` (judge = real `claude-sonnet-4-6`, applied verbatim):
 

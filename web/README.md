@@ -5,8 +5,8 @@ that streams a due-diligence run as it settles on Base. **Live:** https://ward-w
 
 - **Stack:** Next.js 15 (App Router, RSC) · Tailwind v4 (`@theme` tokens) · Fraunces + IBM Plex Mono
   (`next/font`) · a Node SSE route handler that spawns the orchestrator and relays its state trace.
-- **Design:** warm editorial zine per [`internal/design.md`](../internal/design.md) — cream paper,
-  poster-scale serif, a single highlighter accent, flat 1px surfaces.
+- **Design:** warm editorial zine — cream paper, poster-scale serif, a single highlighter accent,
+  flat 1px surfaces.
 
 ```bash
 npm install

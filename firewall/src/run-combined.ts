@@ -10,7 +10,7 @@
  * where the judge diverged from the reference labels (H## -> hostile, C## -> safe).
  */
 import { scan, type JudgeFn, type Verdict } from "./firewall.js";
-import { CORPUS } from "../../internal/firewall-ref/corpus.js";
+import { CORPUS } from "./corpus.js";
 import { claudeJudge } from "./judge.js";
 import { capturedJudge, CAPTURE_MODEL } from "./judge-live-capture.js";
 

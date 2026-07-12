@@ -6,7 +6,7 @@
  *   npm run pattern
  */
 import { scanPattern } from "./firewall.js";
-import { CORPUS } from "../../internal/firewall-ref/corpus.js";
+import { CORPUS } from "./corpus.js";
 
 interface Row {
   id: string;

@@ -29,22 +29,27 @@ Ward closes both. Nobody else builds the layer that makes *consuming* agent work
 
 ## What Ward does
 
-```
-                                  ┌──────────────────────────────────────────────┐
-  human / agent ──"vet 0x…"──▶    │  WARD                                          │
-                                  │                                                │
-                                  │   INTAKE → PLAN                                 │
-                                  │      │                                         │
-                                  │      ├─▶ hire supplier A ─┐                     │
-                                  │      ├─▶ hire supplier B ─┼─▶ 🛡 FIREWALL each   │
-                                  │      └─▶ hire supplier C ─┘   deliverable       │
-                                  │                    │                           │
-                                  │              COLLATE · reconcile · anti-sybil   │
-                                  │                    │                           │
-                                  │                 VERDICT  ── go / caution / no-go│
-                                  └────────────────────┼───────────────────────────┘
-                                                       ▼
-                              §9 verdict + confidence + findings + on-chain evidence_hash
+```mermaid
+flowchart LR
+    U(["human · agent"]) -- "vet a token" --> I
+
+    subgraph WARD ["WARD"]
+        direction TB
+        I["INTAKE"] --> P["PLAN — external-dominant fan-out"]
+        P --> A["hire agent · audit"]
+        P --> L["hire agent · liquidity"]
+        A --> FW{{"FIREWALL — injection scan"}}
+        L --> FW
+        FW --> C["COLLATE — reconcile · anti-sybil"]
+        C --> V["VERDICT — content risk-score"]
+    end
+
+    V --> OUT(["go / caution / no-go<br/>· confidence · on-chain evidence"])
+
+    classDef fw stroke:#4f46e5,stroke-width:2px
+    classDef out stroke:#0f766e,stroke-width:2px
+    class FW fw
+    class OUT out
 ```
 
 Every deliverable is negotiated, paid, and settled as a **real CAP order on Base** — then screened by

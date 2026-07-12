@@ -15,5 +15,5 @@ dist/
 .next/
 next-env.d.ts
 
-# local submission draft — not for the repo
-BUIDL.md
+# internal working notes, reference impl + submission drafts — not for the public repo
+internal/
