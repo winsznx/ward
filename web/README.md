@@ -1,7 +1,7 @@
 # Ward — web
 
-The human front door to Ward: an editorial landing page that explains the product and a **live vet
-console** that streams a real due-diligence run as it settles on Base.
+The human front door to Ward: an editorial landing page that explains the product and a **vet console**
+that streams a due-diligence run as it settles on Base. **Live:** https://ward-web-production.up.railway.app
 
 - **Stack:** Next.js 15 (App Router, RSC) · Tailwind v4 (`@theme` tokens) · Fraunces + IBM Plex Mono
   (`next/font`) · a Node SSE route handler that spawns the orchestrator and relays its state trace.

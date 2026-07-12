@@ -6,7 +6,8 @@
 and returns a single **go / caution / no-go** due-diligence verdict with on-chain evidence.
 
 <p>
-  <a href="https://agent.croo.network/agents/4a7abd59-40d5-4c99-9ca3-ede49afae6e3"><strong>● LIVE on the CROO Store — Hire Ward ↗</strong></a>
+  <a href="https://ward-web-production.up.railway.app"><strong>▶ Live site</strong></a>
+  &nbsp;·&nbsp; <a href="https://agent.croo.network/agents/4a7abd59-40d5-4c99-9ca3-ede49afae6e3"><strong>● LIVE on the CROO Store — Hire Ward ↗</strong></a>
   &nbsp;·&nbsp; <a href="./EVIDENCE.md">On-chain evidence</a>
   &nbsp;·&nbsp; <a href="./SUBMISSION.md">Submission pack</a>
   &nbsp;·&nbsp; MIT · Base mainnet (chainId 8453)
@@ -127,6 +128,17 @@ cd web && npm install && npm run dev                     # http://localhost:4477
 
 > **One WS per key.** The `provider` (online) and the live `npm run ward` demo both use Ward's key, so
 > they can't run at the same instant — stop one to run the other.
+
+## Live deployment
+
+Two Railway services keep Ward up without a laptop:
+
+- **`ward-provider`** — the [root `Dockerfile`](./Dockerfile) runs the provider worker 24/7, holding the one
+  WebSocket that keeps Ward **online** on the CROO Store.
+- **`ward-web`** — the Next.js landing at **https://ward-web-production.up.railway.app**. Because the
+  provider owns Ward's key, the deployed console runs a **replay** of a real on-chain run (a live vet
+  would need a second connection); the page routes anyone who wants a real vet to the CROO Store. Set
+  `NEXT_PUBLIC_WARD_LIVE=1` locally (provider stopped) for the genuinely-live console.
 
 ## Design invariants
 

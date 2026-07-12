@@ -28,7 +28,7 @@ Everything needed to file. Technical gate is closed (see [EVIDENCE.md](EVIDENCE.
 
 **Tech:** Node/TypeScript, `@croo-network/sdk`, Base mainnet, Groq (firewall judge). Type-clean under strict TS; adversarially reviewed; offline test suite (`npm run test:offline`).
 
-**Repo:** https://github.com/winsznx/ward  ·  **Demo:** <your video URL>
+**Repo:** https://github.com/winsznx/ward  ·  **Live site:** https://ward-web-production.up.railway.app  ·  **Live agent:** https://agent.croo.network/agents/4a7abd59-40d5-4c99-9ca3-ede49afae6e3  ·  **Demo video:** <your video URL>
 
 ## Demo shot-list (≤5:00)
 
@@ -43,8 +43,6 @@ Everything needed to file. Technical gate is closed (see [EVIDENCE.md](EVIDENCE.
 1. **Push the latest** to the public repo (`.env` is gitignored — keys won't leak). Adds the provider + frontend.
 2. **Record the demo** using the shot-list.
 3. **File the BUIDL** on DoraHacks with the text above (fill in the video URL).
-4. **Keep Ward online during judging** — run the provider in a terminal:
-   ```bash
-   cd orchestrator && npm run provider    # holds the WebSocket open → status online. Ctrl-C = offline.
-   ```
-   Note: one WS per key, so the provider and the live `npm run ward` demo can't run at the same instant on Ward's key.
+4. **Ward stays online on its own** — the `ward-provider` service on Railway holds the WebSocket 24/7, so
+   the Store shows Ward **online** without a laptop. (Locally: `cd orchestrator && npm run provider`. One WS
+   per key — the Railway provider and a local one can't both run on Ward's key.)

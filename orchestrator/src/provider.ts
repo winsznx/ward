@@ -1,4 +1,4 @@
-import { DeliverableType, EventType, type Event } from '@croo-network/sdk';
+import { DeliverableType, EventType, type Event, type EventStream } from '@croo-network/sdk';
 import { loadConfig } from './config.js';
 import { createClient } from './croo-client.js';
 import { explainError } from './errors.js';
@@ -7,7 +7,7 @@ import { FirewallGate } from '../../firewall/src/gate.js';
 import { groqJudge } from '../../firewall/src/judge-groq.js';
 import { runDD } from './fsm.js';
 import { Logger } from './logger.js';
-import { Mutex, installShutdown, watchConnection } from './runtime.js';
+import { Mutex, sleep } from './runtime.js';
 
 const ADDR_RE = /0x[0-9a-fA-F]{40}/;
 
@@ -34,36 +34,39 @@ function extractTarget(requirements: string | undefined): string | undefined {
   return raw ? raw[0] : undefined;
 }
 
-/**
- * Ward's PROVIDER process. Holding this websocket open is what flips Ward from OFFLINE to online on
- * the CROO Store. When a human hires Ward's "Token DD Verdict" service it fulfils the H2A hero flow:
- * accept → on payment run the real multi-supplier DD on THIS SAME connection (one WS per key, 1008)
- * → deliver the §9 verdict on-chain.
- */
-async function main(): Promise<void> {
-  const cfg = loadConfig();
-  const log = new Logger('ward-provider');
-  log.info('Ward provider starting — this connection is what flips Ward ONLINE on the CROO Store', {
-    api: cfg.apiURL,
-    ws: cfg.wsURL,
+/** Resolve once the stream hits a fatal (the SDK stores 1008/duplicate-key in `stream.err()` and
+ *  stops; transient drops auto-reconnect underneath, so we never see those). */
+function waitForStreamFatal(stream: EventStream): Promise<Error> {
+  return new Promise((resolve) => {
+    const t = setInterval(() => {
+      const e = stream.err();
+      if (e) {
+        clearInterval(t);
+        resolve(e);
+      }
+    }, 2000);
+    t.unref();
   });
+}
 
-  const client = createClient(cfg, log);
-  const payMutex = new Mutex(); // no-concurrent-pay (nonce) inside a DD run
-  const ddMutex = new Mutex(); // one DD at a time — the shared EventRouter is single-in-flight
-  const gate = new FirewallGate(groqJudge);
+interface Deps {
+  client: ReturnType<typeof createClient>;
+  cfg: ReturnType<typeof loadConfig>;
+  gate: FirewallGate;
+  payMutex: Mutex;
+  ddMutex: Mutex;
+  soldOrders: Map<string, { target: string; negotiationId: string }>;
+  accepted: Set<string>;
+  delivered: Set<string>;
+  log: Logger;
+}
 
-  const stream = await client.connectWebSocket();
-  const router = new EventRouter(stream, log);
-  log.step('ONLINE', 'websocket connected — Ward is now ONLINE and accepting Token DD Verdict orders');
-
-  // Ward-as-provider bookkeeping. Ward never receives NegotiationCreated for its own OUTGOING supplier
-  // negotiations (those are delivered to the supplier), so every NegotiationCreated here is a human
-  // hiring Ward. Delivery is still gated on soldOrders so a supplier's OrderPaid (Ward paying Attestr,
-  // where Ward is the buyer) can never be mistaken for one of Ward's own sold orders.
-  const soldOrders = new Map<string, { target: string; negotiationId: string }>();
-  const accepted = new Set<string>();
-  const delivered = new Set<string>();
+/** Attach Ward-as-provider handlers to a (re)connected stream. Ward never receives NegotiationCreated
+ *  for its own OUTGOING supplier negotiations (those go to the supplier), so every NegotiationCreated
+ *  here is a human hiring Ward; delivery is still gated on soldOrders so a supplier's OrderPaid (Ward
+ *  paying Attestr, where Ward is the buyer) can't be mistaken for one of Ward's own sold orders. */
+function serve(stream: EventStream, router: EventRouter, d: Deps): void {
+  const { client, cfg, gate, payMutex, ddMutex, soldOrders, accepted, delivered, log } = d;
 
   stream.on(EventType.NegotiationCreated, async (e: Event) => {
     const negotiationId = e.negotiation_id;
@@ -122,10 +125,71 @@ async function main(): Promise<void> {
   stream.on(EventType.OrderExpired, (e: Event) =>
     log.warn('order expired (SLA breach) — escrow refunds to buyer', { order: e.order_id, reason: e.reason }),
   );
+}
 
-  watchConnection(stream, log);
-  installShutdown(stream, log);
-  log.info('Ward provider ready — holding the connection open (Ctrl-C to go offline)');
+/**
+ * Ward's PROVIDER process. Holding one WebSocket open is what flips Ward from OFFLINE to online on the
+ * CROO Store; when a human hires the "Token DD Verdict" service it runs the full multi-supplier DD on
+ * THIS SAME connection (one WS per key, 1008) and delivers the §9 verdict on-chain.
+ *
+ * Supervised: a 1008/duplicate-key close (e.g. a stale session lingering after a redeploy) is NOT fatal
+ * — the loop backs off and reconnects in-process rather than exiting, so a fast restart can't crash-loop
+ * against the backend's session cleanup.
+ */
+async function main(): Promise<void> {
+  const cfg = loadConfig();
+  const log = new Logger('ward-provider');
+  log.info('Ward provider starting — this connection is what flips Ward ONLINE on the CROO Store', {
+    api: cfg.apiURL,
+    ws: cfg.wsURL,
+  });
+
+  const client = createClient(cfg, log);
+  const deps: Deps = {
+    client,
+    cfg,
+    gate: new FirewallGate(groqJudge),
+    payMutex: new Mutex(),
+    ddMutex: new Mutex(),
+    soldOrders: new Map(),
+    accepted: new Set(),
+    delivered: new Set(),
+    log,
+  };
+
+  const bye = (sig: string): void => {
+    log.info(`received ${sig} — going offline`);
+    process.exit(0);
+  };
+  process.on('SIGINT', () => bye('SIGINT'));
+  process.on('SIGTERM', () => bye('SIGTERM'));
+
+  let backoffMs = 5_000;
+  for (;;) {
+    let stream: EventStream;
+    try {
+      stream = await client.connectWebSocket();
+    } catch (err) {
+      log.error(`connect failed: ${(err as Error).message} — retrying in ${Math.round(backoffMs / 1000)}s`);
+      await sleep(backoffMs);
+      backoffMs = Math.min(backoffMs * 2, 60_000);
+      continue;
+    }
+
+    const router = new EventRouter(stream, log);
+    serve(stream, router, deps);
+    log.step('ONLINE', 'websocket connected — Ward is now ONLINE and accepting Token DD Verdict orders');
+    backoffMs = 5_000;
+
+    const fatal = await waitForStreamFatal(stream);
+    try { stream.close(); } catch { /* already closed */ }
+
+    const duplicate = /1008|duplicate|policy violation/i.test(fatal.message);
+    const wait = duplicate ? 45_000 : backoffMs;
+    log.warn(`websocket closed: ${fatal.message} — reconnecting in ${Math.round(wait / 1000)}s${duplicate ? ' (letting the backend clear the stale session)' : ''}`);
+    await sleep(wait);
+    if (!duplicate) backoffMs = Math.min(backoffMs * 2, 60_000);
+  }
 }
 
 main().catch((err) => {
