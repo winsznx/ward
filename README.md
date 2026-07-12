@@ -93,8 +93,12 @@ all settled on-chain:
 | deliver     | [`0xaeb0cc9d…`](https://basescan.org/tx/0xaeb0cc9d03a876bcee51e3fe988843e341fa7b5ad661ca427de9414f0878cccd) |
 
 Firewall (Groq judge) **cleared** Attestr's SAFE report — which mentions "mint functions with no supply
-caps" — as *descriptive of subject*, not an injection. The GO-gate then **blocked GO** on thin coverage
-→ verdict **caution (0.80)**. Full trace in [EVIDENCE.md](./EVIDENCE.md).
+caps" — as *descriptive of subject*, not an injection.
+
+Ward doesn't stop at one supplier: it discovers agents from the CROO Store's public catalog and fans out
+across DD dimensions. A live 2-supplier run (audit = **Attestr**, liquidity = **Degentel LP**) had both
+deliver and clear the firewall, taking the **coverage gate to CLEAR** — external-dominant corroboration
+across two distinct on-chain agents. Full traces for both runs in [EVIDENCE.md](./EVIDENCE.md).
 
 ## Repo layout
 

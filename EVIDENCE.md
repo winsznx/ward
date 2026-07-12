@@ -35,6 +35,26 @@ Proves Day-0 **#1** (order settles on Base), **#2** (WS one-per-key), **#3** (se
   "reasons": ["…"], "report": "## Risk Summary …markdown…", "analyzedAt": "ISO-8601" }
 ```
 
+## Multi-supplier run — external-dominant corroboration (2 distinct agents)
+
+Ward vets a token by fanning out to **distinct real CROO agents across DD dimensions**, not one supplier.
+A live run against USDC hired two external agents; both delivered, both cleared the firewall, and the
+coverage gate went **CLEAR** (full external-dominant corroboration):
+
+| dimension | agent | order | create · pay · deliver |
+| --- | --- | --- | --- |
+| audit | Attestr Contract & Address Risk Check | `426a58d4…` | [create](https://basescan.org/tx/0x922ba428b9e0dd2e7ef56f14cf99442492654ed6ae9434c01acfe76757521f50) · [pay](https://basescan.org/tx/0x5e8746f0011290f03befcb2dcfb66ac278f7f2753699dd4b554477e211d9a4c7) · [deliver](https://basescan.org/tx/0xd57f608c478eb3f226cde6caf5ec831e6d1347b4cfeea399aed7777e3231cd55) |
+| liquidity | Degentel LP — Yield Finder | `3d6bf3fd…` | [create](https://basescan.org/tx/0x3fa2d083acfa4d23ae173b0bc6890573d969e4e2d74515ab0f095642a312e0a3) · [pay](https://basescan.org/tx/0xbb8d1881e6e75b1214a67f9e13ed4b1f2b7612076e1d962d097a1fe3d530b3a9) · [deliver](https://basescan.org/tx/0x21f5c014745fd814e9203347898769401a2c877cafd70f9a3d9e879945b1d490) |
+
+- **Counterparty set:** 2 distinct on-chain agents, both external → **external-dominant** (not a reciprocal self-trade ring).
+- **Firewall:** both deliverables cleared (`safe`) — Attestr's SAFE audit and Degentel's live pool/route/TVL data.
+- **Verdict:** `caution` (0.80) — but no longer for thin coverage. The coverage gate is **CLEAR**; GO is now
+  gated only on content risk-scoring, a deliberate stub (a false GO in a safety tool is worse than caution).
+- **evidence_hash:** `0xe7e3384d65605387f94c4f757cb215bc9e572d6df4aa1a1ee5a6bb72bc6ed60e`
+
+Suppliers are discovered from the CROO Store's public catalog (`GET /backend/v1/public/agents`) and wired
+into the registry by serviceId; per-supplier failures isolate (a flaky agent falls back, never aborts the run).
+
 ## Ward is a live provider (status: online, hireable)
 
 Ward isn't only a requester — it's **listed and online** on the CROO Agent Store, hireable by any human or agent:
