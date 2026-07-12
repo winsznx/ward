@@ -13,7 +13,7 @@ import { assessDominance, buildPlan, deliveredCounterparties, orderedCounterpart
 import { loadRegistry, type Cluster, type RegistryEntry } from './src/registry.js';
 import type { Finding, SupplierOutcome } from './src/model.js';
 import { EMPTY_TX } from './src/model.js';
-import { composeVerdict, normalizeFinding } from './src/verdict.js';
+import { composeVerdict, normalizeFinding, readRisk } from './src/verdict.js';
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(`ASSERT FAILED: ${msg}`);
@@ -26,10 +26,11 @@ function entry(id: string, category: string, cluster: Cluster, reliability = 0.5
     requirementsTemplate: { t: '{{target}}' }, priceCeiling: 1, reliability, enabled: true,
   };
 }
-function finding(dimension: string, contested = false): Finding {
+function finding(dimension: string, contested = false, risk?: Finding['risk']): Finding {
   return {
     source_agent: `0x${dimension}`, source_service: dimension, category: dimension, signal: 'sig',
     severity: contested ? 'warn' : 'info', firewall: { safety: contested ? 'suspicious' : 'safe', conformance: 1 },
+    ...(risk ? { risk } : {}),
     order_id: `ord-${dimension}`, settled: true,
   };
 }
@@ -114,16 +115,24 @@ function testVerdict(): void {
   const f = normalizeFinding(entry('attestr', 'audit', 'external'), admittedFinding(false), 'ord1', true);
   assert(f.firewall.safety === 'safe' && f.firewall.conformance === 1 && f.severity === 'info', 'NORMALIZE: §9 finding from registry entry');
 
-  // A: full external-dominant clean coverage -> CAUTION (coverage gate CLEAR; GO gated on content scoring)
+  // A: full external-dominant coverage + audit content-scored CLEAN -> GO
   const oA = [
-    outcome({ dimension: 'audit', cluster: 'external', status: 'admitted', finding: finding('audit') }),
+    outcome({ dimension: 'audit', cluster: 'external', status: 'admitted', finding: finding('audit', false, { level: 'clean', badge: 'SAFE', score: 12 }) }),
     outcome({ dimension: 'sentiment', cluster: 'external', status: 'admitted', finding: finding('sentiment') }),
   ];
   const vA = composeVerdict({ target: '0xT', outcomes: oA, plannedDimensions: 2, coveredDimensions: 2, dominance: assessDominance(cps(['external', 'external'])), droppedForDominance: [], noExternalSupply: false, skippedForBudget: [] });
-  assert(vA.verdict === 'caution', 'full clean dominant -> CAUTION (never GO without content scoring)');
-  assert(vA.notes.includes('coverage gate CLEAR'), 'invariant: coverage blockers empty surfaced as CLEAR');
+  assert(vA.verdict === 'go', 'clean audit + external-dominant + full coverage -> GO');
+  assert(vA.notes.includes('GO:'), 'GO rationale surfaced on the verdict face');
   assert(vA.sources_run === 2 && vA.findings.length === 2, 'aggregates both sources into §9');
   assert(/0x[0-9a-f]{64}/.test(vA.evidence_hash), 'evidence_hash computed over the aggregate');
+
+  // A2: same coverage but audit NOT content-scored clean (unknown) -> CAUTION, GO blocked on content
+  const oA2 = [
+    outcome({ dimension: 'audit', cluster: 'external', status: 'admitted', finding: finding('audit') }),
+    outcome({ dimension: 'sentiment', cluster: 'external', status: 'admitted', finding: finding('sentiment') }),
+  ];
+  const vA2 = composeVerdict({ target: '0xT', outcomes: oA2, plannedDimensions: 2, coveredDimensions: 2, dominance: assessDominance(cps(['external', 'external'])), droppedForDominance: [], noExternalSupply: false, skippedForBudget: [] });
+  assert(vA2.verdict === 'caution' && vA2.notes.includes('not content-scored clean'), 'coverage clear but unknown risk -> CAUTION (no false GO)');
 
   // B: partial coverage + a failed source + a budget-skip -> CAUTION, GO blocked, nothing swallowed
   const oB = [
@@ -158,6 +167,20 @@ function testVerdict(): void {
   const vE = composeVerdict({ target: '0xT', outcomes: oE, plannedDimensions: 3, coveredDimensions: 3, dominance: assessDominance(cps(['external', 'friendly', 'friendly'])), droppedForDominance: [], noExternalSupply: false, skippedForBudget: [] });
   assert(vE.verdict === 'caution' && vE.notes.includes('not external-dominant'), 'friendly-heavy -> not dominant, surfaced, GO blocked');
   assert(vE.confidence < vA.confidence, 'non-dominant supply lowers confidence vs external-dominant');
+
+  // F: a source content-scored the token DANGEROUS -> NO-GO even with clean, dominant coverage
+  const oF = [
+    outcome({ dimension: 'audit', cluster: 'external', status: 'admitted', finding: finding('audit', false, { level: 'dangerous', badge: 'DANGEROUS', score: 85 }) }),
+    outcome({ dimension: 'sentiment', cluster: 'external', status: 'admitted', finding: finding('sentiment') }),
+  ];
+  const vF = composeVerdict({ target: '0xT', outcomes: oF, plannedDimensions: 2, coveredDimensions: 2, dominance: assessDominance(cps(['external', 'external'])), droppedForDominance: [], noExternalSupply: false, skippedForBudget: [] });
+  assert(vF.verdict === 'no-go' && vF.notes.includes('dangerous'), 'audit content-scored dangerous -> NO-GO regardless of coverage');
+
+  // readRisk: only an explicit structured signal moves off unknown (no false clean/danger from prose)
+  assert(readRisk('{"badge":"SAFE","riskScore":12}').level === 'clean', 'readRisk: SAFE + low score -> clean');
+  assert(readRisk('{"badge":"DANGEROUS","riskScore":88}').level === 'dangerous', 'readRisk: DANGEROUS + high score -> dangerous');
+  assert(readRisk('{"routes":{"r1":"uniswap pool TVL $1M"}}').level === 'unknown', 'readRisk: no risk field -> unknown (never a false clean)');
+  assert(readRisk('the contract owner can mint tokens freely').level === 'unknown', 'readRisk: descriptive prose -> unknown (no keyword false-positive)');
 }
 
 interface FakeStream { push: (e: Event) => void; asEventStream: EventStream; }

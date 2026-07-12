@@ -5,6 +5,16 @@ export type VerdictLabel = 'go' | 'caution' | 'no-go';
 export type Severity = 'info' | 'warn' | 'critical';
 export type FirewallSafety = 'safe' | 'suspicious' | 'hostile';
 
+/** Content risk read of a firewall-admitted deliverable (distinct from firewall safety, which is about
+ *  an injection AIMED at Ward). `clean`/`dangerous` are only asserted from an explicit structured signal
+ *  (a risk badge/score); ambiguous content stays `unknown` so it can never manufacture a false GO. */
+export type RiskLevel = 'clean' | 'caution' | 'dangerous' | 'unknown';
+export interface RiskRead {
+  level: RiskLevel;
+  score?: number;
+  badge?: string;
+}
+
 /** §9 Finding (normalized per source). */
 export interface Finding {
   source_agent: string;
@@ -13,6 +23,8 @@ export interface Finding {
   signal: string;
   severity: Severity;
   firewall: { safety: FirewallSafety; conformance: number };
+  /** content risk-scoring of the deliverable itself (the GO-gate's safety signal). */
+  risk?: RiskRead;
   order_id: string;
   settled: boolean;
 }

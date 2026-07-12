@@ -2,14 +2,61 @@ import { ethers } from 'ethers';
 import type { AdmittedFinding } from '../../firewall/src/gate.js';
 import type { DominanceReport } from './plan.js';
 import type { RegistryEntry } from './registry.js';
-import type { Contradiction, Finding, Severity, SupplierOutcome, Verdict, VerdictLabel } from './model.js';
+import type { Contradiction, Finding, RiskLevel, RiskRead, Severity, SupplierOutcome, Verdict, VerdictLabel } from './model.js';
 
 const SIGNAL_MAX = 280;
 const CONFIDENCE_CAP = 0.8;
+const GO_CONFIDENCE_CAP = 0.95;
 
-/** Content is not yet risk-scored — the conformance scorer + contradiction collator are later
- *  prompts. Until then GO is structurally gated even when the coverage gate is clear. */
-const CONTENT_RISK_SCORED = false;
+const RISK_RANK: Record<RiskLevel, number> = { unknown: 0, clean: 1, caution: 2, dangerous: 3 };
+const BADGE_DANGER = /\b(danger|dangerous|high|critical|fail(ed)?|scam|honeypot|rug|malicious|unsafe|blacklist|blocked|reject)\b/i;
+const BADGE_CAUTION = /\b(caution|medium|moderate|warn|warning|suspicious|review)\b/i;
+const BADGE_CLEAN = /\b(safe|low|pass(ed)?|clean|verified|legit|ok)\b/i;
+
+/**
+ * Content risk-scoring (§9): read a firewall-admitted deliverable's OWN risk signal — separate from the
+ * firewall (which asks "is this trying to hijack me?"). Conservative by construction: `clean` and
+ * `dangerous` are only asserted from an explicit structured badge/score (e.g. Attestr `{badge, riskScore}`);
+ * heterogeneous prose stays `unknown` so it can never manufacture a false GO. Worst signal wins.
+ */
+export function readRisk(text: string): RiskRead {
+  let badge: string | undefined;
+  let score: number | undefined;
+  try {
+    const o = JSON.parse(text) as Record<string, unknown>;
+    const b = o.badge ?? o.rating ?? o.risk ?? o.verdict ?? o.status ?? o.result;
+    if (typeof b === 'string') badge = b;
+    const s = o.riskScore ?? o.risk_score ?? o.score;
+    if (typeof s === 'number' && Number.isFinite(s)) score = s;
+  } catch {
+    // not JSON — fall back to a shallow structured scan
+  }
+  if (badge === undefined) {
+    const m = text.match(/"?badge"?\s*[:=]\s*"?(safe|caution|dangerous|high|low|medium|critical)/i);
+    if (m && m[1]) badge = m[1];
+  }
+  if (score === undefined) {
+    const m = text.match(/"?risk[_ ]?score"?\s*[:=]\s*"?(\d{1,3})/i);
+    if (m && m[1]) score = Number(m[1]);
+  }
+
+  let level: RiskLevel = 'unknown';
+  const worst = (l: RiskLevel): void => {
+    if (RISK_RANK[l] > RISK_RANK[level]) level = l;
+  };
+  if (badge) {
+    if (BADGE_DANGER.test(badge)) worst('dangerous');
+    else if (BADGE_CAUTION.test(badge)) worst('caution');
+    else if (BADGE_CLEAN.test(badge)) worst('clean');
+  }
+  if (score !== undefined) {
+    // higher = riskier, 0-100 (Attestr semantics)
+    if (score >= 70) worst('dangerous');
+    else if (score >= 35) worst('caution');
+    else worst('clean');
+  }
+  return { level, ...(score !== undefined ? { score } : {}), ...(badge ? { badge } : {}) };
+}
 
 /** NORMALIZE: a firewall-admitted deliverable -> a §9 Finding. */
 export function normalizeFinding(
@@ -26,6 +73,7 @@ export function normalizeFinding(
     signal: admitted.text.replace(/\s+/g, ' ').trim().slice(0, SIGNAL_MAX),
     severity,
     firewall: { safety: admitted.safety, conformance: 1 }, // conformance scorer pending — pass-through 1.0
+    risk: readRisk(admitted.text),
     order_id: orderId,
     settled,
   };
@@ -103,6 +151,15 @@ export function composeVerdict(ctx: VerdictContext): Verdict {
     if (o.reason && o.status !== 'admitted') notes.push(`${o.label}: ${o.reason}`);
   }
 
+  // Content risk-scoring — separate from the coverage gate. The audit dimension is the load-bearing
+  // safety signal; GO needs it explicitly scored clean, and ANY source scoring the token dangerous
+  // blocks release outright. `clean`/`dangerous` come only from structured signals (readRisk), so an
+  // ambiguous/unknown read can never manufacture a GO.
+  const dangerousSources = findings.filter((f) => f.risk?.level === 'dangerous');
+  const auditClean = findings.some((f) => f.category === 'audit' && f.risk?.level === 'clean');
+  const riskBlockers: string[] = [];
+  if (!auditClean) riskBlockers.push('audit source not content-scored clean (needs an explicit SAFE + low-risk read)');
+
   let verdict: VerdictLabel;
   let confidence: number;
   if (sources_quarantined > 0 && usable === 0) {
@@ -113,20 +170,21 @@ export function composeVerdict(ctx: VerdictContext): Verdict {
     verdict = 'caution'; // pure coverage failure
     confidence = 0.1;
     notes.push('no usable findings — partial/zero coverage');
-  } else if (coverageBlockers.length === 0 && CONTENT_RISK_SCORED) {
-    verdict = 'go'; // full external-dominant corroboration AND content risk-scored
-    confidence = Math.min(CONFIDENCE_CAP, coverage);
+  } else if (dangerousSources.length > 0) {
+    verdict = 'no-go'; // a source content-scored the token itself dangerous
+    confidence = 0.15;
+    notes.push(`NO-GO: content risk-scored dangerous by ${dangerousSources.map((f) => `${f.source_service}${f.risk?.badge ? ` (${f.risk.badge})` : ''}`).join(', ')}`);
+  } else if (coverageBlockers.length === 0 && riskBlockers.length === 0) {
+    verdict = 'go'; // external-dominant corroboration AND content-scored clean, no danger
+    confidence = Math.min(GO_CONFIDENCE_CAP, 0.7 + 0.1 * usable);
+    notes.push('GO: external-dominant corroboration + audit content-scored clean; no danger signals');
   } else {
     verdict = 'caution'; // gated from GO
     const admitted = outcomes.filter((o) => o.status === 'admitted');
     const avgWeight = admitted.length > 0 ? admitted.reduce((sum, o) => sum + o.weight, 0) / admitted.length : 1;
     const dominanceFactor = dominance.dominant ? 1 : 0.5;
     confidence = Math.min(CONFIDENCE_CAP, coverage * dominanceFactor * avgWeight);
-    notes.push(
-      coverageBlockers.length === 0
-        ? 'coverage gate CLEAR (full external-dominant corroboration); GO gated only on content risk-scoring (later prompt)'
-        : `GO blocked: ${coverageBlockers.join('; ')}`,
-    );
+    notes.push(`GO blocked: ${[...coverageBlockers, ...riskBlockers].join('; ')}`);
   }
 
   notes.push(
