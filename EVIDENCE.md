@@ -66,7 +66,20 @@ Ward isn't only a requester — it's **listed and online** on the CROO Agent Sto
 
 **H2A fulfilment (one agent, both roles, one key).** On `NegotiationCreated` the provider accepts; on `OrderPaid` it extracts the token from the buyer's requirements and runs the **full multi-supplier DD on that same connection** (the DD core `runDD` is shared with the requester CLI — no second WebSocket, respecting one-WS-per-key/1008), then `deliverOrder`s the §9 verdict on-chain. Requirement templates are substituted **per order**, so Ward vets whatever token the buyer sends.
 
-- **H2A order (Ward as seller):** _pending a funded buyer — will list order id + create/pay/deliver/clear txs here once the hire lands._
+### H2A order — a human hired Ward, Ward fulfilled (the hero flow, live)
+
+A human (a separate funded wallet `0xF9793…`) hired Ward's *Token DD Verdict* service for USDC. Ward's
+online provider accepted, ran the **full 2-supplier DD on the same connection**, and delivered the §9
+verdict on-chain — one agent acting as **provider and requester at once**:
+
+- **Buyer order (Ward as seller):** `7c1775f3-892e-41da-8d9f-359d9f5b3598` · $1.00 · requirements `{ chain: base, tokenAddress: 0x8335…2913 }`
+  - [createOrder](https://basescan.org/tx/0x6e97150fa254bf59f78d67dc387fbb3e4da6ee1f103694e6ff008922f08018c7) (buyer paid $1.01) → verdict [deliver](https://basescan.org/tx/0xd095c365100561ace703a8c5c7d07cd1d7dbcdc7c67e70ffbb35d9d839d6aefa)
+- **Ward's sub-orders (Ward as requester), fulfilling the buyer:**
+  - audit · Attestr `04e399b0` — [create](https://basescan.org/tx/0x6b8a7ff99ade942a45cc028132792bec64fb74448728947ae2a6647b98788800) · [pay](https://basescan.org/tx/0xb96fb1cf71a80aae54c8dc6acf6c52a44c6ab39538ba18b1a2ca01327a126073) · [deliver](https://basescan.org/tx/0xf882f3194c1c92d3bf59134623e327a7c85c21e64e6cff01cb57509cf291dcc2) — firewall **safe**
+  - liquidity · Degentel `0f2d1c13` — [create](https://basescan.org/tx/0x8eafd733febf1840d5c2030b61f8ffeb59492d9f77fab3fab68dfb85b11d083c) · [pay](https://basescan.org/tx/0x6b4d51becc03e39055a5df0f0cc354cfa37db140b541fa20eb914d2df920a5f0) · [deliver](https://basescan.org/tx/0xb08a4cf312d5fbeb5808cc3611a58a9c351a8d53889f08cf84a88db08721c9c8) — firewall **safe**
+- **Verdict:** `caution` (0.80) — 2 distinct external delivered, `dominant=true`, coverage covered 2/2.
+
+This is the H2A hero end to end: **human → Ward → (Attestr + Degentel) → firewall → §9 verdict**, all on Ward's single WebSocket.
 
 ## Reproduce
 
