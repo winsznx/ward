@@ -73,7 +73,7 @@ export function loadConfig(): WardConfig {
   const chain = process.env.WARD_DD_CHAIN?.trim() || 'base';
   const target = env.WARD_DD_TARGET!;
 
-  const registry = loadRegistry(process.env.WARD_REGISTRY_JSON, target, chain);
+  const registry = loadRegistry(process.env.WARD_REGISTRY_JSON);
   if (registry.length === 0) {
     throw new ConfigError('No enabled suppliers — seed registry is disabled and WARD_REGISTRY_JSON is empty. Configure at least one supplier.');
   }

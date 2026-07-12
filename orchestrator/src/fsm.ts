@@ -15,8 +15,9 @@ import { EventRouter, OrderRejectedError, OrderTimeoutError } from './events.js'
 import { reportIntegrity, verifyDeliveryIntegrity } from './integrity.js';
 import { Logger } from './logger.js';
 import { EMPTY_TX, State, type Finding, type OrderTx, type SupplierOutcome, type Verdict } from './model.js';
-import { assessDominance, buildPlan, deliveredCounterparties, orderedCounterparties, type Counterparty } from './plan.js';
+import { assessDominance, buildPlan, deliveredCounterparties, orderedCounterparties, type Counterparty, type DominanceReport } from './plan.js';
 import type { RegistryEntry } from './registry.js';
+import { substitutePlaceholders } from './util.js';
 import { Mutex, installShutdown, watchConnection } from './runtime.js';
 import { collate, composeVerdict, normalizeFinding } from './verdict.js';
 
@@ -60,6 +61,7 @@ async function runSupplier(
   payMutex: Mutex,
   gate: FirewallGate,
   cfg: WardConfig,
+  target: string,
   entry: RegistryEntry,
   deadlineMs: number,
   log: Logger,
@@ -96,7 +98,7 @@ async function runSupplier(
   try {
     const neg = await negotiateService(client, {
       serviceId: entry.serviceId,
-      requirements: entry.requirementsTemplate,
+      requirements: substitutePlaceholders(entry.requirementsTemplate, target, cfg.chain) as Record<string, unknown>,
     });
     negotiationId = neg.negotiationId;
     log.info('negotiation opened', { negotiation: negotiationId, status: neg.status });
@@ -274,25 +276,43 @@ function printVerdict(log: Logger, verdict: Verdict, outcomes: SupplierOutcome[]
   log.info(`counterparty set (${counterparties.length} distinct on-chain): ${counterparties.map((c) => `${c.label}[${c.cluster}]`).join(', ') || 'none'}`);
 }
 
-export async function runWard(cfg: WardConfig): Promise<number> {
-  const log = new Logger('ward');
+/** Halt with no verdict when the plan is empty (misconfigured registry). Distinct from HaltError
+ *  (out-of-USDC): both abort the DD, callers map them to their own exit/refund behavior. */
+export class PlanError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PlanError';
+  }
+}
 
-  // INTAKE
-  log.step(State.Intake, 'token-DD intake', { target: cfg.target, chain: cfg.chain, request: cfg.request });
+/** Everything a DD run needs beyond the target — an ALREADY-CONNECTED client/router so both the
+ *  requester CLI (runWard) and the provider fulfil on the SAME websocket (one WS per key, 1008). */
+export interface DDDeps {
+  client: AgentClient;
+  router: EventRouter;
+  payMutex: Mutex;
+  gate: FirewallGate;
+  cfg: WardConfig;
+  log: Logger;
+}
 
-  const client = createClient(cfg, log);
-  const payMutex = new Mutex();
-  const gate = new FirewallGate(groqJudge); // production firewall judge wired (Groq, GROQ_API_KEY)
+export interface DDResult {
+  verdict: Verdict;
+  outcomes: SupplierOutcome[];
+  orderGraph: Counterparty[];
+  dominance: DominanceReport;
+}
 
-  const stream = await client.connectWebSocket();
-  const router = new EventRouter(stream, log);
-  watchConnection(stream, log);
-  installShutdown(stream, log);
-  log.step(State.Intake, 'websocket connected (one-per-key 1008 watchdog active)');
+/** The DD spine on an existing connection: PLAN → external-dominant fan-out → anti-sybil → §9 verdict.
+ *  Does NOT connect, close, deliver, or print — the caller owns the socket and what to do with the
+ *  verdict. Throws HaltError (out-of-USDC) or PlanError (empty plan); all per-supplier failures isolate. */
+export async function runDD(deps: DDDeps, target: string): Promise<DDResult> {
+  const { client, router, payMutex, gate, cfg, log } = deps;
 
   // PLAN — external-dominant fan-out across DD dimensions, primary + alternates per dimension
   const plan = buildPlan(cfg.registry);
   log.step(State.Plan, 'planned external-dominant fan-out', {
+    target,
     dimensions: plan.dimensions.map((d) => `${d.category}(${d.primaryCluster}:${d.candidates.length})`).join(' '),
     dropped: plan.droppedForDominance.join(',') || 'none',
   });
@@ -300,12 +320,7 @@ export async function runWard(cfg: WardConfig): Promise<number> {
     log.info(`  dimension ${d.category}: ${d.candidates.map((c) => `${c.label}[${c.cluster}]`).join(' → ')}`);
   }
   if (plan.noExternalSupply) log.warn('no external supplier configured — run will NOT be external-dominant (degraded)');
-  if (plan.dimensions.length === 0) {
-    log.error('PLAN produced no dimensions — check the registry');
-    log.banner('WARD HALTED — empty plan', false);
-    stream.close();
-    return 2;
-  }
+  if (plan.dimensions.length === 0) throw new PlanError('PLAN produced no dimensions — check the registry');
 
   // FAN-OUT — SEQUENTIAL (pay-mutex/nonce), per-supplier isolation, aggregate timeout budget
   const deadlineMs = Date.now() + cfg.fanoutBudgetMs;
@@ -313,44 +328,33 @@ export async function runWard(cfg: WardConfig): Promise<number> {
   const skippedForBudget: string[] = [];
   let coveredDimensions = 0;
 
-  try {
-    for (const dim of plan.dimensions) {
+  for (const dim of plan.dimensions) {
+    if (deadlineMs - Date.now() < MIN_ATTEMPT_MS) {
+      skippedForBudget.push(dim.category);
+      log.warn('fan-out budget exhausted — skipping dimension', { dimension: dim.category });
+      continue;
+    }
+    let covered = false;
+    for (let i = 0; i < dim.candidates.length; i++) {
+      const candidate = dim.candidates[i];
+      if (!candidate) break;
       if (deadlineMs - Date.now() < MIN_ATTEMPT_MS) {
         skippedForBudget.push(dim.category);
-        log.warn('fan-out budget exhausted — skipping dimension', { dimension: dim.category });
-        continue;
+        log.warn('fan-out budget exhausted mid-dimension', { dimension: dim.category });
+        break;
       }
-      let covered = false;
-      for (let i = 0; i < dim.candidates.length; i++) {
-        const candidate = dim.candidates[i];
-        if (!candidate) break;
-        if (deadlineMs - Date.now() < MIN_ATTEMPT_MS) {
-          skippedForBudget.push(dim.category);
-          log.warn('fan-out budget exhausted mid-dimension', { dimension: dim.category });
-          break;
-        }
-        if (i > 0) log.step(State.Plan, 'primary failed — falling to alternate', { dimension: dim.category, alternate: candidate.label });
+      if (i > 0) log.step(State.Plan, 'primary failed — falling to alternate', { dimension: dim.category, alternate: candidate.label });
 
-        const outcome = await runSupplier(client, router, payMutex, gate, cfg, candidate, deadlineMs, log);
-        outcomes.push(outcome);
+      const outcome = await runSupplier(client, router, payMutex, gate, cfg, target, candidate, deadlineMs, log);
+      outcomes.push(outcome);
 
-        if (outcome.status === 'admitted') {
-          covered = true;
-          coveredDimensions += 1;
-          break; // dimension covered — do not hire alternates
-        }
+      if (outcome.status === 'admitted') {
+        covered = true;
+        coveredDimensions += 1;
+        break; // dimension covered — do not hire alternates
       }
-      if (!covered) log.warn('dimension uncovered after all candidates', { dimension: dim.category });
     }
-  } catch (err) {
-    if (err instanceof HaltError) {
-      log.error(`HALT: ${err.message}`);
-      log.banner('WARD HALTED — operator action required (no verdict)', false);
-      stream.close();
-      return 2;
-    }
-    stream.close();
-    throw err;
+    if (!covered) log.warn('dimension uncovered after all candidates', { dimension: dim.category });
   }
 
   // ANTI-SYBIL — assert external-dominant directional consumption (not a reciprocal swap ring).
@@ -374,7 +378,7 @@ export async function runWard(cfg: WardConfig): Promise<number> {
   const { findings: collated } = collate(findings);
   log.step(State.Verdict, 'composing §9 verdict', { sources: outcomes.length, usable: collated.length, covered: coveredDimensions });
   const verdict = composeVerdict({
-    target: cfg.target,
+    target,
     outcomes,
     plannedDimensions: plan.dimensions.length,
     coveredDimensions,
@@ -383,6 +387,46 @@ export async function runWard(cfg: WardConfig): Promise<number> {
     noExternalSupply: plan.noExternalSupply,
     skippedForBudget,
   });
+
+  return { verdict, outcomes, orderGraph, dominance };
+}
+
+export async function runWard(cfg: WardConfig): Promise<number> {
+  const log = new Logger('ward');
+
+  // INTAKE
+  log.step(State.Intake, 'token-DD intake', { target: cfg.target, chain: cfg.chain, request: cfg.request });
+
+  const client = createClient(cfg, log);
+  const payMutex = new Mutex();
+  const gate = new FirewallGate(groqJudge); // production firewall judge wired (Groq, GROQ_API_KEY)
+
+  const stream = await client.connectWebSocket();
+  const router = new EventRouter(stream, log);
+  watchConnection(stream, log);
+  installShutdown(stream, log);
+  log.step(State.Intake, 'websocket connected (one-per-key 1008 watchdog active)');
+
+  let result: DDResult;
+  try {
+    result = await runDD({ client, router, payMutex, gate, cfg, log }, cfg.target);
+  } catch (err) {
+    if (err instanceof HaltError) {
+      log.error(`HALT: ${err.message}`);
+      log.banner('WARD HALTED — operator action required (no verdict)', false);
+      stream.close();
+      return 2;
+    }
+    if (err instanceof PlanError) {
+      log.error(err.message);
+      log.banner('WARD HALTED — empty plan', false);
+      stream.close();
+      return 2;
+    }
+    stream.close();
+    throw err;
+  }
+  const { verdict, outcomes, orderGraph } = result;
 
   // DELIVER_TO_HUMAN
   if (cfg.humanOrderId) {

@@ -17,11 +17,14 @@ That second half is the hard part and the whole reason this is two layers, not a
    `soceng.bypass_steps`). It over-fires on ~17% of clean reports by design — those are the
    FP-traps the judge exists to clear.
 
-2. **Judge layer** ([src/judge.ts](src/judge.ts) `claudeJudge`) — a `claude-sonnet-4-6` call
-   that makes the one call the pattern layer cannot: **imperative-to-reader** (an instruction
-   aimed at the agent reading this → hostile) vs **descriptive-of-subject** (reporting that a
-   contract *can* mint/drain → safe). Fails **SAFE**: any parse/transport failure becomes
-   `suspicious` → flag, never a silent pass.
+2. **Judge layer** — a single LLM call that makes the one call the pattern layer cannot:
+   **imperative-to-reader** (an instruction aimed at the agent reading this → hostile) vs
+   **descriptive-of-subject** (reporting that a contract *can* mint/drain → safe). Fails **SAFE**:
+   any parse/transport failure becomes `suspicious` → flag, never a silent pass. Ward wires the
+   **Groq** judge in production ([src/judge-groq.ts](src/judge-groq.ts) `groqJudge`, default
+   `llama-3.3-70b-versatile`); a drop-in **Claude** judge ([src/judge.ts](src/judge.ts)
+   `claudeJudge`, `claude-sonnet-4-6`) implements the same fail-safe `JudgeFn` contract. Both are
+   interchangeable — the gate takes any `JudgeFn`.
 
 ## The combination is ASYMMETRIC (not "more severe wins")
 

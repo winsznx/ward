@@ -10,6 +10,7 @@
   },
   "scripts": {
     "ward": "tsx src/index.ts",
+    "provider": "tsx src/provider.ts",
     "probe": "tsx src/probe.ts",
     "start": "tsx src/index.ts",
     "test:offline": "tsx verify-offline.itest.ts",

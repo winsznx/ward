@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
-/* Ward design system — warm editorial zine (internal/design.md).
-   Cream canvas, Fraunces serif at poster scale, IBM Plex Mono for all UI,
-   near-monochrome olive-sage palette, one yellow accent, flat 1px surfaces. */
+/* Ward — warm editorial zine (internal/design.md).
+   Cream canvas, Fraunces at poster scale (weight 300 = the signature), IBM Plex Mono for all UI,
+   near-monochrome olive-sage palette, ONE yellow accent (≤4/screen), flat 1px surfaces, no shadows. */
 @theme {
   --color-vellum: #f6f6f4;
   --color-paper: #ffffff;
@@ -17,7 +17,7 @@
   --color-highlighter: #fff347;
   --color-khaki: #aaa674;
 
-  /* status accents (verdict) — kept warm, used sparingly */
+  /* verdict status — kept warm, used sparingly */
   --color-go: #4f6a3f;
   --color-caution: #a6892f;
   --color-nogo: #8f3b34;
@@ -28,6 +28,7 @@
 
 html {
   background: var(--color-vellum);
+  scroll-behavior: smooth;
 }
 
 body {
@@ -39,19 +40,25 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* editorial serif — thin strokes at scale are the signature move */
+/* the editorial serif — thin strokes at poster scale carry the whole system */
 .font-display {
   font-family: var(--font-serif);
   font-weight: 300;
   letter-spacing: -0.05em;
-  line-height: 0.98;
+  line-height: 0.96;
+}
+.font-display-italic {
+  font-family: var(--font-serif);
+  font-weight: 300;
+  font-style: italic;
+  letter-spacing: -0.05em;
 }
 
 .eyebrow {
   font-family: var(--font-mono);
   font-weight: 500;
   font-size: 12px;
-  letter-spacing: -0.067em;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--color-lichen);
 }
@@ -62,10 +69,45 @@ body {
   background: var(--color-highlighter);
 }
 
+/* a 2-3 bar accent cluster (design.md: one 2px black, one 5px yellow) */
+.accent-cluster > span {
+  display: block;
+}
+
 ::selection {
   background: var(--color-highlighter);
   color: var(--color-ink);
 }
 
-@keyframes ward-blink { 0%, 100% { opacity: 1 } 50% { opacity: 0.35 } }
+/* ---- motion: one orchestrated load, restrained ---- */
+@keyframes ward-fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ward-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+@keyframes ward-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+.reveal {
+  opacity: 0;
+  animation: ward-fade-up 0.75s cubic-bezier(0.22, 0.7, 0.2, 1) forwards;
+}
+.reveal-on-scroll {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 0.7s cubic-bezier(0.22, 0.7, 0.2, 1), transform 0.7s cubic-bezier(0.22, 0.7, 0.2, 1);
+}
+.reveal-on-scroll.is-visible {
+  opacity: 1;
+  transform: none;
+}
 .blink { animation: ward-blink 1.1s ease-in-out infinite; }
+.grow-x { transform-origin: left; animation: ward-grow 0.6s cubic-bezier(0.22, 0.7, 0.2, 1) forwards; }
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal, .reveal-on-scroll, .grow-x, .blink { animation: none; opacity: 1; transform: none; transition: none; }
+}
+
+/* thin scrollbar inside the dark terminal panel */
+.term-scroll::-webkit-scrollbar { width: 6px; }
+.term-scroll::-webkit-scrollbar-thumb { background: var(--color-olive-char); border-radius: 3px; }
+.term-scroll::-webkit-scrollbar-track { background: transparent; }

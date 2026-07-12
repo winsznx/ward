@@ -6,7 +6,7 @@ Everything needed to file. Technical gate is closed (see [EVIDENCE.md](EVIDENCE.
 
 - [x] **Integrated with CAP — settles on-chain (real orders):** Ward→Attestr order `5c4d4cf9…`, real create/pay/deliver txs on Base. Done.
 - [x] **Open source (MIT):** [LICENSE](LICENSE) added.
-- [ ] **Listed on CROO Agent Store, status online:** Ward is registered + has a service (discoverable). Needs a connected process to flip to *online* — optional provider (below).
+- [x] **Listed on CROO Agent Store, status online:** Ward is **LIVE** on the Store (green dot). The `ward-provider` process holds the connection open and fulfils the *Token DD Verdict* service. Done.
 - [ ] **Demo (≤5 min) + README:** shot-list below; READMEs exist per package.
 - [ ] **BUIDL filed on DoraHacks:** text below.
 
@@ -22,11 +22,13 @@ Everything needed to file. Technical gate is closed (see [EVIDENCE.md](EVIDENCE.
 
 **A2A composability:** every verdict is an external-dominant fan-out — Ward generates diverse, directional counterparty traffic (not a self-trade ring); anti-sybil dominance is enforced on the *delivered* set and logged each run.
 
+**Hireable + online (H2A):** Ward isn't only a requester — it's a **live provider** on the CROO Store. The `ward-provider` process holds one WebSocket open (→ status *online*) and, when a human hires the *Token DD Verdict* service, accepts the order and runs the full multi-supplier DD **on that same connection** (one WS per key), then delivers the §9 verdict on-chain. One agent, both roles, one key — the DD core (`runDD`) is shared between the requester CLI and the provider.
+
 **The moat (firewall):** a deterministic pattern layer + a Groq LLM-judge that distinguishes instructions *aimed at the reader* from content *about the subject*, with a decode pre-pass that catches base64/hex/zero-width-obfuscated injections deterministically. Lineage: Cordon, Solana Agent Firewall, Custos Gate-0.
 
 **Tech:** Node/TypeScript, `@croo-network/sdk`, Base mainnet, Groq (firewall judge). Type-clean under strict TS; adversarially reviewed; offline test suite (`npm run test:offline`).
 
-**Repo:** <your public GitHub URL>  ·  **Demo:** <your video URL>
+**Repo:** https://github.com/winsznx/ward  ·  **Demo:** <your video URL>
 
 ## Demo shot-list (≤5:00)
 
@@ -38,7 +40,11 @@ Everything needed to file. Technical gate is closed (see [EVIDENCE.md](EVIDENCE.
 
 ## Your 4 actions
 
-1. **Push the repo public** on GitHub (LICENSE is in place). `.env` is gitignored — your keys won't leak.
+1. **Push the latest** to the public repo (`.env` is gitignored — keys won't leak). Adds the provider + frontend.
 2. **Record the demo** using the shot-list.
-3. **File the BUIDL** on DoraHacks with the text above (fill in repo + video URLs).
-4. *(optional)* run the Ward provider to flip **status → online**.
+3. **File the BUIDL** on DoraHacks with the text above (fill in the video URL).
+4. **Keep Ward online during judging** — run the provider in a terminal:
+   ```bash
+   cd orchestrator && npm run provider    # holds the WebSocket open → status online. Ctrl-C = offline.
+   ```
+   Note: one WS per key, so the provider and the live `npm run ward` demo can't run at the same instant on Ward's key.

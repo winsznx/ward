@@ -102,10 +102,10 @@ function testRegistry(): void {
   console.log('\n[registry — strict enabled validation]');
   const mk = (enabled: unknown) => JSON.stringify([{ id: 'x', label: 'X', agentId: '0x', serviceId: 'svc-x', category: 'audit', cluster: 'external', requirementsTemplate: { a: '{{target}}' }, enabled }]);
   let threw = false;
-  try { loadRegistry(mk('true'), '0xT', 'base'); } catch { threw = true; }
+  try { loadRegistry(mk('true')); } catch { threw = true; }
   assert(threw, 'enabled:"true" (non-boolean) is rejected, not silently coerced to false');
-  const reg = loadRegistry(mk(true), '0xTARGET', 'base');
-  assert(reg.some((e) => e.id === 'x' && (e.requirementsTemplate as { a: string }).a === '0xTARGET'), 'valid entry parsed + {{target}} substituted');
+  const reg = loadRegistry(mk(true));
+  assert(reg.some((e) => e.id === 'x' && (e.requirementsTemplate as { a: string }).a === '{{target}}'), 'valid entry parsed; template kept raw for per-order substitution');
 }
 
 function testVerdict(): void {

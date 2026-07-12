@@ -1,4 +1,3 @@
-import { substitutePlaceholders } from './util.js';
 
 export type Cluster = 'external' | 'friendly';
 
@@ -112,7 +111,7 @@ function parseEntry(raw: unknown, idx: number): RegistryEntry {
  * Build the active registry: seeds (overridable by id) + operator entries from WARD_REGISTRY_JSON,
  * with the DD target/chain substituted into each requirements template. Returns enabled entries only.
  */
-export function loadRegistry(rawJson: string | undefined, target: string, chain: string): RegistryEntry[] {
+export function loadRegistry(rawJson: string | undefined): RegistryEntry[] {
   const byId = new Map<string, RegistryEntry>();
   for (const seed of SEEDS) byId.set(seed.id, { ...seed, requirementsTemplate: { ...seed.requirementsTemplate } });
 
@@ -132,10 +131,6 @@ export function loadRegistry(rawJson: string | undefined, target: string, chain:
 
   const disabled = new Set((process.env.WARD_DISABLE_SUPPLIERS ?? '').split(',').map((s) => s.trim()).filter(Boolean));
 
-  return [...byId.values()]
-    .filter((e) => e.enabled && !disabled.has(e.id))
-    .map((e) => ({
-      ...e,
-      requirementsTemplate: substitutePlaceholders(e.requirementsTemplate, target, chain) as Record<string, unknown>,
-    }));
+  // Templates keep {{target}}/{{chain}} raw — substituted per DD run (the provider fulfills arbitrary tokens).
+  return [...byId.values()].filter((e) => e.enabled && !disabled.has(e.id));
 }

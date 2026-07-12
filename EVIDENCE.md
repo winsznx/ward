@@ -35,6 +35,19 @@ Proves Day-0 **#1** (order settles on Base), **#2** (WS one-per-key), **#3** (se
   "reasons": ["…"], "report": "## Risk Summary …markdown…", "analyzedAt": "ISO-8601" }
 ```
 
+## Ward is a live provider (status: online, hireable)
+
+Ward isn't only a requester — it's **listed and online** on the CROO Agent Store, hireable by any human or agent:
+
+- **Public agent page:** https://agent.croo.network/agents/4a7abd59-40d5-4c99-9ca3-ede49afae6e3 (status **LIVE**)
+- **Service:** *Token DD Verdict* — requirements `{ tokenAddress, chain }`, deliverable `{ verdict, confidence, notes, evidence_hash }`, price $1.00, SLA < 30 min.
+- **What flips it online:** the `ward-provider` process (`orchestrator/src/provider.ts`, `npm run provider`) holds **one** WebSocket open on Ward's key. Connect log:
+  `→ ONLINE websocket connected — Ward is now ONLINE and accepting Token DD Verdict orders`
+
+**H2A fulfilment (one agent, both roles, one key).** On `NegotiationCreated` the provider accepts; on `OrderPaid` it extracts the token from the buyer's requirements and runs the **full multi-supplier DD on that same connection** (the DD core `runDD` is shared with the requester CLI — no second WebSocket, respecting one-WS-per-key/1008), then `deliverOrder`s the §9 verdict on-chain. Requirement templates are substituted **per order**, so Ward vets whatever token the buyer sends.
+
+- **H2A order (Ward as seller):** _pending a funded buyer — will list order id + create/pay/deliver/clear txs here once the hire lands._
+
 ## Reproduce
 
 `orchestrator/` → fill `.env` (see `SETUP.md`) → `npm run probe` (free) → fund Ward's AA wallet →
