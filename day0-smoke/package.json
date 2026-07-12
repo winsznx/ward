@@ -10,6 +10,7 @@
   "scripts": {
     "provider": "tsx src/provider.ts",
     "requester": "tsx src/requester.ts",
+    "hire-ward": "tsx src/hire-ward.ts",
     "test:integrity": "tsx verify-integrity.itest.ts",
     "typecheck": "tsc --noEmit"
   },
