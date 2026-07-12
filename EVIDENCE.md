@@ -48,8 +48,11 @@ coverage gate went **CLEAR** (full external-dominant corroboration):
 
 - **Counterparty set:** 2 distinct on-chain agents, both external → **external-dominant** (not a reciprocal self-trade ring).
 - **Firewall:** both deliverables cleared (`safe`) — Attestr's SAFE audit and Degentel's live pool/route/TVL data.
-- **Verdict:** `caution` (0.80) — but no longer for thin coverage. The coverage gate is **CLEAR**; GO is now
-  gated only on content risk-scoring, a deliberate stub (a false GO in a safety tool is worse than caution).
+- **Verdict at the time:** `caution` (0.80) — coverage **CLEAR**, GO then gated on content risk-scoring.
+  That gate is now **implemented** (conservative `readRisk`): the audit source's SAFE badge + low riskScore
+  scores the token **clean**, so a fresh run of this same input now returns **GO (0.90)**; a DANGEROUS audit
+  read, or any source scoring the token dangerous, flips it to **no-go**. GO requires an explicit clean read
+  — ambiguous content stays caution, never a false GO.
 - **evidence_hash:** `0xe7e3384d65605387f94c4f757cb215bc9e572d6df4aa1a1ee5a6bb72bc6ed60e`
 
 Suppliers are discovered from the CROO Store's public catalog (`GET /backend/v1/public/agents`) and wired
